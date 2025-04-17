@@ -61,7 +61,9 @@ def main(args):
     save_episode = True
     # TODO ######################
     onscreen_cam = 'main'
-    state_dim = 14
+    # act修改
+    # state_dim = 14
+    state_dim = 7
     dataset_dir = args['dataset_dir']
     onscreen_render = args['onscreen_render']
     ckpt_dir = args['ckpt_dir']

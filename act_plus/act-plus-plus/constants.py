@@ -1,8 +1,19 @@
 import pathlib
 import os
 
-### Task parameters
-DATA_DIR = '/home/zfu/interbotix_ws/src/act/data' if os.getlogin() == 'zfu' else '/scr/tonyzhao/datasets'
+### act修改
+DATA_DIR = '/home/madoka/python/imitation_learning/act_plus/data'
+### act修改
+TASK_CONFIGS = {
+    'test':{
+        'dataset_dir': DATA_DIR + '/sample/test',
+        'episode_len': 1000,
+        'train_ratio': 0.9,
+        'camera_names': ['camera0', 'camera1', 'camera2']
+    },
+}
+
+
 SIM_TASK_CONFIGS = {
     'sim_transfer_cube_scripted':{
         'dataset_dir': DATA_DIR + '/sim_transfer_cube_scripted',

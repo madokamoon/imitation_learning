@@ -1,16 +1,12 @@
 import pathlib
 import os
 
-### Task parameters
-# DATA_DIR = '/home/haoyue/code/jk_imitation_learning/data/sample/2025-04-06-20-55-02' 
-DATA_DIR = '/home/haoyue/code/jk_imitation_learning/data/sample/2025-04-15-22-30-14'
-# DATA_DIR = '/home/haoyue/code/jk_imitation_learning/src/act_plus_plus/act_plus_plus/data' 
-# DATA_DIR = '/home/haoyue/code/jk_imitation_learning/src/act_plus_plus/act_plus_plus/dataread' 
-
-
+### act修改
+DATA_DIR = '/home/madoka/python/imitation_learning/act_plus/data/sample/test'
+### act修改
 TASK_CONFIGS = {
     'demo':{
-        'dataset_dir': DATA_DIR + '/demo',
+        'dataset_dir': DATA_DIR + '/sample/test',
         'episode_len': 1000,
         'train_ratio': 0.9,
         'camera_names': ['camera0', 'camera1', 'camera2']

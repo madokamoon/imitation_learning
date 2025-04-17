@@ -267,8 +267,9 @@ def build_encoder(args):
 
 
 def build(args):
-    state_dim = 14 # TODO hardcode
-
+    # act修改
+    # state_dim = 14 # TODO hardcode
+    state_dim = 7 # TODO hardcode
     # From state
     # backbone = None # from state for now, no need for conv nets
     # From image
@@ -282,7 +283,9 @@ def build(args):
     if args.no_encoder:
         encoder = None
     else:
-        encoder = build_transformer(args)
+        # act修改
+        # encoder = build_transformer(args)
+        encoder = build_encoder(args)
 
     model = DETRVAE(
         backbones,
@@ -303,7 +306,9 @@ def build(args):
     return model
 
 def build_cnnmlp(args):
-    state_dim = 14 # TODO hardcode
+    # act修改
+    # state_dim = 14 # TODO hardcode
+    state_dim = 7 # TODO hardcode
 
     # From state
     # backbone = None # from state for now, no need for conv nets
