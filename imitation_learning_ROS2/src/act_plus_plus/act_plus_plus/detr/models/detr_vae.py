@@ -88,7 +88,6 @@ class DETRVAE(nn.Module):
 
 
     def encode(self, qpos, actions=None, is_pad=None, vq_sample=None):
-        # print(actions.shape)
         bs, _ = qpos.shape
         if self.encoder is None:
             latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
@@ -268,8 +267,9 @@ def build_encoder(args):
 
 
 def build(args):
+    # act修改
+    # state_dim = 14 # TODO hardcode
     state_dim = 7 # TODO hardcode
-
     # From state
     # backbone = None # from state for now, no need for conv nets
     # From image
@@ -283,6 +283,8 @@ def build(args):
     if args.no_encoder:
         encoder = None
     else:
+        # act修改
+        # encoder = build_transformer(args)
         encoder = build_encoder(args)
 
     model = DETRVAE(
@@ -304,6 +306,8 @@ def build(args):
     return model
 
 def build_cnnmlp(args):
+    # act修改
+    # state_dim = 14 # TODO hardcode
     state_dim = 7 # TODO hardcode
 
     # From state

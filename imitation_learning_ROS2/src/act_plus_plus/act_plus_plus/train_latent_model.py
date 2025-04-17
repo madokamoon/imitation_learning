@@ -50,6 +50,8 @@ def main(args):
     name_filter = task_config.get('name_filter', lambda n: True)
 
     # fixed parameters
+    # act修改
+    # state_dim = 14
     state_dim = 7
     lr_backbone = 1e-5
     backbone = 'resnet18'
