@@ -17,9 +17,9 @@ realsense-viewer
 
 ```shell
 #创建一个 ROS2 工作空间
-mkdir -p ~/realsence_warpper/src
-cd ~/realsence_warpper/src/  #解压到此
-cd ~/realsence_warpper
+mkdir -p ~/realsence_ros/src
+cd ~/realsence_ros/src/  #解压到此
+cd ~/realsence_ros
 # 安装依赖项
 sudo apt-get install python3-rosdep -y
 sudo rosdep init 
@@ -27,7 +27,7 @@ rosdep update
 rosdep install -i --from-path src --rosdistro $ROS_DISTRO --skip-keys=librealsense2 -y
 colcon build
 # 加入环境
-source ~/code/realsence_warpper/install/local_setup.bash
+source ~/realsence_ros/install/local_setup.bash
 ```
 **测试**
 ```
@@ -62,8 +62,8 @@ pip3 install pyserial
 ## 操作说明
 
 ```shell
-#系统python环境编译
-conda deactivate
+
+cd imitation_learning_ROS2
 rm -rf build/ install/ log/
 colcon build
 source install/setup.bash
@@ -109,3 +109,20 @@ python3 scripts/visualize_epoch.py 0
                 └── state.json
 ```
 
+
+# 其他
+
+imitation_learning_ROS2/src/diffusion_policy/diffusion_policy/eval_real_robot.py 
+的夹爪方式还是 c++ ，可能还需要安装 
+robotiq-gripper-interface 
+
+https://github.com/amzn/robotiq-gripper-interface
+
+```pyhton
+git clone https://github.com/amzn/robotiq-gripper-interface.git
+cd robotiq-gripper-interface
+mkdir build && cd build
+cmake ..
+make -j12
+sudo make install
+```

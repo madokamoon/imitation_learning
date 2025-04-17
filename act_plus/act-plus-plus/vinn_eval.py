@@ -123,6 +123,7 @@ def main(args):
             camera_names = list(root[f'/observations/images/'].keys())
 
         # Visual feature
+        # 提取视觉特征
         all_cam_feature = []
         for cam_name in camera_names:
             feature_dataset_path = os.path.join(dataset_dir, f'{repr_type}_features_seed{seed}_episode_{episode_id}.hdf5')
@@ -132,33 +133,41 @@ def main(args):
         vis_fea = np.concatenate(all_cam_feature, axis=1)
 
         ## State feature
+        # 提取状态特征（机器人关节角度）
         dataset_path = os.path.join(dataset_dir, f'episode_{episode_id}.hdf5')
         with h5py.File(dataset_path, 'r') as root:
             s_fea = root['/observations/qpos'][:]
 
         # stack actions together
+        # 将动作堆叠在一起，处理跳跃帧
         eps_len = len(action)
         indices = np.tile(np.arange(skip), eps_len).reshape(eps_len, skip) # each row is 0, 1, ... skip
+        # 每行是从0到skip的索引
         offset = np.expand_dims(np.arange(eps_len), axis=1)
         indices = indices + offset # row1: 0, 1, ... skip; row2: 1, 2, ... skip+1
+        # 索引将超出eps_len，因此限制到eps_len-1
         # indices will exceed eps_len, thus clamp to eps_len-1
         indices = np.clip(indices, 0, eps_len-1)
         # stack action
+        # 堆叠动作，得到新形状: eps_len, skip, a_dim
         action = action[indices] # new shape: eps_len, skip, a_dim
 
         vis_features.append(vis_fea)
         state_features.append(s_fea)
         Y.append(action)
 
+    # 合并所有数据
     vis_features = np.concatenate(vis_features)
     state_features  = np.concatenate(state_features)
     Y = np.concatenate(Y)
     train_inputs = [torch.from_numpy(vis_features).cuda(), torch.from_numpy(state_features).cuda()]
     train_targets = torch.from_numpy(Y).cuda()
 
+    # 设置随机种子并加载特征提取器
     set_seed(1000)
     feature_extractors = {}
     for cam_name in camera_names:
+        # 初始化ResNet18模型
         resnet = torchvision.models.resnet18(pretrained=True)
         loading_status = resnet.load_state_dict(torch.load(model_dir.replace('DUMMY', cam_name)))
         print(cam_name, loading_status)

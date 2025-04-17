@@ -28,6 +28,7 @@ import IPython
 e = IPython.embed
 
 def get_auto_index(dataset_dir):
+    # 获取自动索引，用于保存新的数据文件
     max_idx = 1000
     for i in range(max_idx+1):
         if not os.path.isfile(os.path.join(dataset_dir, f'qpos_{i}.npy')):
@@ -35,8 +36,10 @@ def get_auto_index(dataset_dir):
     raise Exception(f"Error getting auto index, or more than {max_idx} episodes")
 
 def main(args):
+    # 主函数，处理命令行参数并执行训练或评估
     set_seed(1)
     # command line parameters
+    # 解析命令行参数
     is_eval = args['eval']
     ckpt_dir = args['ckpt_dir']
     policy_class = args['policy_class']
@@ -45,12 +48,13 @@ def main(args):
     batch_size_train = args['batch_size']
     batch_size_val = args['batch_size']
     num_steps = args['num_steps']
-    eval_every = args['eval_every']
+    eval_every = args['eval_every']  # 训练时候 多少step验证一次
     validate_every = args['validate_every']
     save_every = args['save_every']
     resume_ckpt_path = args['resume_ckpt_path']
 
     # get task parameters
+    # 获取任务参数
     is_sim = task_name[:4] == 'sim_'
     if is_sim or task_name == 'all':
         from constants import SIM_TASK_CONFIGS
@@ -72,12 +76,14 @@ def main(args):
     name_filter = task_config.get('name_filter', lambda n: True)
 
     # fixed parameters
+    # 固定参数
     # act修改
     # state_dim = 14
     state_dim = 7
     lr_backbone = 1e-5
     backbone = 'resnet18'
     if policy_class == 'ACT':
+        # 配置ACT策略的参数
         enc_layers = 4
         dec_layers = 7
         nheads = 8
@@ -101,7 +107,7 @@ def main(args):
                          'no_encoder': args['no_encoder'],
                          }
     elif policy_class == 'Diffusion':
-
+        # 配置Diffusion策略的参数
         policy_config = {'lr': args['lr'],
                          'camera_names': camera_names,
                          'action_dim': 16,
@@ -114,12 +120,14 @@ def main(args):
                          'vq': False,
                          }
     elif policy_class == 'CNNMLP':
+        # 配置CNNMLP策略的参数
         policy_config = {'lr': args['lr'], 'lr_backbone': lr_backbone, 'backbone' : backbone, 'num_queries': 1,
                          'camera_names': camera_names,}
     else:
         raise NotImplementedError
 
     actuator_config = {
+        # 配置执行器网络的参数
         'actuator_network_dir': args['actuator_network_dir'],
         'history_len': args['history_len'],
         'future_len': args['future_len'],
@@ -127,6 +135,7 @@ def main(args):
     }
 
     config = {
+        # 整合所有配置
         'num_steps': num_steps,
         'eval_every': eval_every,
         'validate_every': validate_every,
@@ -149,17 +158,21 @@ def main(args):
     }
 
     if not os.path.isdir(ckpt_dir):
+        # 创建检查点目录
         os.makedirs(ckpt_dir)
     config_path = os.path.join(ckpt_dir, 'config.pkl')
     expr_name = ckpt_dir.split('/')[-1]
     if not is_eval:
         # act修改
         # wandb.init(project="mobile-aloha2", reinit=True, entity="mobile-aloha2", name=expr_name)
+        # 初始化wandb用于记录训练过程
         wandb.init(project="mobile-aloha2", reinit=True, name=expr_name)
         wandb.config.update(config)
     with open(config_path, 'wb') as f:
+        # 保存配置文件
         pickle.dump(config, f)
     if is_eval:
+        # 如果是评估模式，执行评估
         ckpt_names = [f'policy_last.ckpt']
         results = []
         for ckpt_name in ckpt_names:
@@ -175,6 +188,7 @@ def main(args):
     train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, name_filter, camera_names, batch_size_train, batch_size_val, args['chunk_size'], args['skip_mirrored_data'], config['load_pretrain'], policy_class, stats_dir_l=stats_dir, sample_weights=sample_weights, train_ratio=train_ratio)
 
     # save dataset stats
+    # 保存数据集统计信息
     stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
     with open(stats_path, 'wb') as f:
         pickle.dump(stats, f)
@@ -183,6 +197,7 @@ def main(args):
     best_step, min_val_loss, best_state_dict = best_ckpt_info
 
     # save best checkpoint
+    # 保存最佳检查点
     ckpt_path = os.path.join(ckpt_dir, f'policy_best.ckpt')
     torch.save(best_state_dict, ckpt_path)
     print(f'Best ckpt, val loss {min_val_loss:.6f} @ step{best_step}')
@@ -190,6 +205,7 @@ def main(args):
 
 
 def make_policy(policy_class, policy_config):
+    # 创建策略模型
     if policy_class == 'ACT':
         policy = ACTPolicy(policy_config)
     elif policy_class == 'CNNMLP':
@@ -202,6 +218,7 @@ def make_policy(policy_class, policy_config):
 
 
 def make_optimizer(policy_class, policy):
+    # 创建优化器
     if policy_class == 'ACT':
         optimizer = policy.configure_optimizers()
     elif policy_class == 'CNNMLP':
@@ -214,6 +231,7 @@ def make_optimizer(policy_class, policy):
 
 
 def get_image(ts, camera_names, rand_crop_resize=False):
+    # 从时间步中获取图像数据
     curr_images = []
     for cam_name in camera_names:
         curr_image = rearrange(ts.observation['images'][cam_name], 'h w c -> c h w')
@@ -236,6 +254,7 @@ def get_image(ts, camera_names, rand_crop_resize=False):
 
 
 def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
+    # 评估行为克隆模型
     set_seed(1000)
     ckpt_dir = config['ckpt_dir']
     state_dim = config['state_dim']
@@ -253,6 +272,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
     use_actuator_net = actuator_config['actuator_network_dir'] is not None
 
     # load policy and stats
+    # 加载策略模型和统计数据
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
     policy = make_policy(policy_class, policy_config)
     loading_status = policy.deserialize(torch.load(ckpt_path))
@@ -304,6 +324,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
         post_process = lambda a: a * stats['action_std'] + stats['action_mean']
 
     # load environment
+    # 加载环境
     if real_robot:
         from aloha_scripts.robot_utils import move_grippers # requires aloha
         from aloha_scripts.real_env import make_real_env # requires aloha
@@ -327,10 +348,12 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
     episode_returns = []
     highest_rewards = []
     for rollout_id in range(num_rollouts):
+        # 执行多次测试
         if real_robot:
             e()
         rollout_id += 0
         ### set task
+        # 设置任务
         if 'sim_transfer_cube' in task_name:
             BOX_POSE[0] = sample_box_pose() # used in sim reset
         elif 'sim_insertion' in task_name:
@@ -339,12 +362,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
         ts = env.reset()
 
         ### onscreen render
+        # 屏幕渲染
         if onscreen_render:
             ax = plt.subplot()
             plt_img = ax.imshow(env._physics.render(height=480, width=640, camera_id=onscreen_cam))
             plt.ion()
 
         ### evaluation loop
+        # 评估循环
         if temporal_agg:
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, 16]).cuda()
 
@@ -363,12 +388,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
             for t in range(max_timesteps):
                 time1 = time.time()
                 ### update onscreen render and wait for DT
+                # 更新屏幕渲染并等待DT时间
                 if onscreen_render:
                     image = env._physics.render(height=480, width=640, camera_id=onscreen_cam)
                     plt_img.set_data(image)
                     plt.pause(DT)
 
                 ### process previous timestep to get qpos and image_list
+                # 处理前一个时间步以获取qpos和image_list
                 time2 = time.time()
                 obs = ts.observation
                 if 'images' in obs:
@@ -386,12 +413,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
 
                 if t == 0:
                     # warm up
+                    # 预热模型
                     for _ in range(10):
                         policy(qpos, curr_image)
                     print('network warm up done')
                     time1 = time.time()
 
                 ### query policy
+                # 查询策略模型
                 time3 = time.time()
                 if config['policy_class'] == "ACT":
                     if t % query_frequency == 0:
@@ -442,6 +471,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
                 # print('query policy: ', time.time() - time3)
 
                 ### post-process actions
+                # 后处理动作
                 time4 = time.time()
                 raw_action = raw_action.squeeze(0).cpu().numpy()
                 action = post_process(raw_action)
@@ -463,6 +493,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
                 # print('post process: ', time.time() - time4)
 
                 ### step the environment
+                # 执行环境步骤
                 time5 = time.time()
                 if real_robot:
                     ts = env.step(target_qpos, base_action)
@@ -471,6 +502,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
                 # print('step env: ', time.time() - time5)
 
                 ### for visualization
+                # 用于可视化
                 qpos_list.append(qpos_numpy)
                 target_qpos_list.append(target_qpos)
                 rewards.append(ts.reward)
@@ -490,10 +522,12 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
         if real_robot:
             move_grippers([env.puppet_bot_left, env.puppet_bot_right], [PUPPET_GRIPPER_JOINT_OPEN] * 2, move_time=0.5)  # open
             # save qpos_history_raw
+            # 保存qpos历史数据
             log_id = get_auto_index(ckpt_dir)
             np.save(os.path.join(ckpt_dir, f'qpos_{log_id}.npy'), qpos_history_raw)
             plt.figure(figsize=(10, 20))
             # plot qpos_history_raw for each qpos dim using subplots
+            # 使用子图绘制每个qpos维度的历史数据
             for i in range(state_dim):
                 plt.subplot(state_dim, 1, i+1)
                 plt.plot(qpos_history_raw[:, i])
@@ -526,6 +560,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
     print(summary_str)
 
     # save success rate to txt
+    # 保存成功率到文本文件
     result_file_name = 'result_' + ckpt_name.split('.')[0] + '.txt'
     with open(os.path.join(ckpt_dir, result_file_name), 'w') as f:
         f.write(summary_str)
@@ -537,12 +572,14 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
 
 
 def forward_pass(data, policy):
+    # 前向传递函数
     image_data, qpos_data, action_data, is_pad = data
     image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
     return policy(qpos_data, image_data, action_data, is_pad) # TODO remove None
 
 
 def train_bc(train_dataloader, val_dataloader, config):
+    # 训练行为克隆模型
     num_steps = config['num_steps']
     ckpt_dir = config['ckpt_dir']
     seed = config['seed']
@@ -570,6 +607,7 @@ def train_bc(train_dataloader, val_dataloader, config):
     train_dataloader = repeater(train_dataloader)
     for step in tqdm(range(num_steps+1)):
         # validation
+        # 验证
         if step % validate_every == 0:
             print('validating')
 
@@ -598,6 +636,7 @@ def train_bc(train_dataloader, val_dataloader, config):
             print(summary_string)
                 
         # evaluation
+        # 评估
         # act修改 暂时不验证
         # if (step > 0) and (step % eval_every == 0):
         #     # first save then eval
@@ -608,11 +647,13 @@ def train_bc(train_dataloader, val_dataloader, config):
         #     wandb.log({'success': success}, step=step)
 
         # training
+        # 训练
         policy.train()
         optimizer.zero_grad()
         data = next(train_dataloader)
         forward_dict = forward_pass(data, policy)
         # backward
+        # 反向传播
         loss = forward_dict['loss']
         loss.backward()
         optimizer.step()
@@ -633,6 +674,7 @@ def train_bc(train_dataloader, val_dataloader, config):
     return best_ckpt_info
 
 def repeater(data_loader):
+    # 数据加载器重复器
     epoch = 0
     for loader in repeat(data_loader):
         for data in loader:

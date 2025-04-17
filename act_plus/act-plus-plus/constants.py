@@ -3,7 +3,6 @@ import os
 
 ### act修改
 DATA_DIR = '/home/madoka/python/imitation_learning/act_plus/data'
-### act修改
 TASK_CONFIGS = {
     'test':{
         'dataset_dir': DATA_DIR + '/sample/test',
