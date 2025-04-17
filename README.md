@@ -1,4 +1,4 @@
-# jk_imitation-learning
+# imitation-learning
 
 敬科jk5机械臂 模仿学习
 [GitHub - madokamoon/jk\_imitation\_learning](https://github.com/madokamoon/jk_imitation_learning)

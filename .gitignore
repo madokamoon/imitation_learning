@@ -1,12 +1,16 @@
-# ROS2 build and install directories
+# ROS2 
 build/
 install/
 log/
+
+# data
 data/
+
+# training
 wandb/
 training/
 
-# IDE specific files
+# IDE 
 .vscode/
 .idea/
 
