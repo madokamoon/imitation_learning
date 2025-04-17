@@ -3,6 +3,7 @@
 ## 安装 librealsense 2.54.2
 
 安装包：[librealsense/archive/refs/tags/v2.54.2.tar.gz](https://github.com/IntelRealSense/librealsense/archive/refs/tags/v2.54.2.tar.gz)
+
 安装说明，跳过内核修补：[IntelRealSense/librealsense · GitHub](https://github.com/IntelRealSense/librealsense/blob/master/doc/installation.md)
 
 **测试**
