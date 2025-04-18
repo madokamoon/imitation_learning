@@ -24,6 +24,7 @@ from detr.models.latent_model import Latent_Model_Transformer
 
 from sim_env import BOX_POSE
 
+
 import IPython
 e = IPython.embed
 
