@@ -6,7 +6,7 @@ DATA_DIR = '/home/madoka/python/imitation_learning/act_plus/data'
 TASK_CONFIGS = {
     'test':{
         'dataset_dir': DATA_DIR + '/sample/test',
-        'episode_len': 1000,
+        'episode_len': 300,
         'train_ratio': 0.9,
         'camera_names': ['camera0', 'camera1', 'camera2']
     },
