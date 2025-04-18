@@ -13,6 +13,9 @@ TASK_CONFIGS = {
 }
 
 
+
+
+
 SIM_TASK_CONFIGS = {
     'sim_transfer_cube_scripted':{
         'dataset_dir': DATA_DIR + '/sim_transfer_cube_scripted',

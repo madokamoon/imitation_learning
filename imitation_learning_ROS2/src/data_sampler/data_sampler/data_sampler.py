@@ -1,6 +1,6 @@
 import pathlib
 import sys
-print("Running with Python:", sys.executable)
+# print("Running with Python:", sys.executable)
 import rclpy
 from rclpy.callback_groups import CallbackGroup
 from rclpy.node import Node
@@ -12,16 +12,13 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import Joy
 from jk_robot_msgs.action import StrAction
-import argparse
+
 import json
 import time
 import cv2
-import threading
 import copy
 import numpy as np
-from scipy.spatial.transform import Rotation
 import time, datetime
-import os
 import yaml
 import shutil
 

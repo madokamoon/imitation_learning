@@ -49,7 +49,7 @@ def main(args):
     batch_size_train = args['batch_size']
     batch_size_val = args['batch_size']
     num_steps = args['num_steps']
-    eval_every = args['eval_every']  # 训练时候 多少step验证一次
+    eval_every = args['eval_every']  # 训练时候 多少step评估一次
     validate_every = args['validate_every']
     save_every = args['save_every']
     resume_ckpt_path = args['resume_ckpt_path']
@@ -64,17 +64,16 @@ def main(args):
         # act修改
         # from aloha_scripts.constants import TASK_CONFIGS
         from constants import TASK_CONFIGS
-
-    
         task_config = TASK_CONFIGS[task_name]
+        
     dataset_dir = task_config['dataset_dir']
     # num_episodes = task_config['num_episodes']
     episode_len = task_config['episode_len']
     camera_names = task_config['camera_names']
-    stats_dir = task_config.get('stats_dir', None)
-    sample_weights = task_config.get('sample_weights', None)
-    train_ratio = task_config.get('train_ratio', 0.99)
-    name_filter = task_config.get('name_filter', lambda n: True)
+    stats_dir = task_config.get('stats_dir', None) # 用于存储或读取数据集的统计数据（如动作和关节位置的均值、标准差等）？
+    sample_weights = task_config.get('sample_weights', None)  # 用于在训练时对不同样本进行加权？
+    train_ratio = task_config.get('train_ratio', 0.99) # 定义训练集与验证集的分割比例
+    name_filter = task_config.get('name_filter', lambda n: True) # 用于筛选要加载的数据文件
 
     # fixed parameters
     # 固定参数
@@ -166,7 +165,6 @@ def main(args):
     if not is_eval:
         # act修改
         # wandb.init(project="mobile-aloha2", reinit=True, entity="mobile-aloha2", name=expr_name)
-        # 初始化wandb用于记录训练过程
         wandb.init(project="mobile-aloha2", reinit=True, name=expr_name)
         wandb.config.update(config)
     with open(config_path, 'wb') as f:

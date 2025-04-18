@@ -20,6 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'eval_jk_robot = act_plus_plus.eval_jk_robot:main',
+            'act_plus_test = act_plus_plus.act_plus_test:main',
         ],
     },
 )
