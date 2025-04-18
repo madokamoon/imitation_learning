@@ -41,20 +41,23 @@ ros2 launch realsense2_camera rs_launch.py
 ```bash
 wget https://github.com/nlohmann/json/archive/refs/tags/v3.11.3.tar.gz
 tar -xf v3.11.3.tar.gz 
+rm v3.11.3.tar.gz
 cd json-3.11.3
 mkdir build && cd build
 cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
 make -j12
 sudo make install
+
 ```
  
 ## 安装其他包
 
 ```shell
-pip3 install lark
-pip3 install numpy==1.24.0
-pip3 install minimalmodbus
-pip3 install pyserial
+pip install lark
+pip install empy==3.3.4
+pip install numpy==1.24.0
+pip install minimalmodbus
+pip install pyserial
 ```
 
 # 数据采集

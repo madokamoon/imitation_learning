@@ -27,7 +27,7 @@ from data_sampler.xbox_controller import XBOXController
 from data_sampler.camera_subscriber import CameraSubscriber
 from data_sampler.pyRobotiqGripper import RobotiqGripper
 
-class DataSampler(Node):
+class RobotPolicy(Node):
     def __init__(self, node_name:str, config_file:str):
         super().__init__(node_name)
         # 读取配置文件
@@ -87,6 +87,12 @@ class DataSampler(Node):
         self.xbox_controller.create_control_action_client(self, 'robot_policy_action', self.actions_callback_group)
         self.get_logger().info("XBOX 初始化完成")
 
+        # ---------act----------
+        # dp_config = yaml_data["diffusion_policy"]
+        # self.dp = DiffusionPolicy(dp_config)
+        # self.get_logger().info("DP 初始化完成")
+        # ---------act----------
+
         # 数据采样
         self.data_id = 0
         self.epoch = 0
@@ -118,6 +124,11 @@ class DataSampler(Node):
         self.robot_client.set_switch_flag4(1)
         time.sleep(0.05)
         self.gripper.open()
+
+        # ---------act----------
+        # self.dp.diffusion_policy_init()
+        # ---------act----------
+
         print("-----开始录制-----")
         # 初始化机器人状态数据录制
         self.start_sample(record_path)
@@ -135,91 +146,6 @@ class DataSampler(Node):
                 # 机器人暂停
                 self.robot_client.set_switch_flag4(0)
                 break
-            # B键执行预定义操作并录制
-            if self.xbox_controller.B_ID in pressed_buttons_id:
-                print("--预定义操作--")
-                # 到达指定位置并录制
-                data = {}
-                now_pos = np.ones(6)
-
-                data["timestamp"] = time.time()
-                now_pos[0:6] = copy.deepcopy(self.robot_client.get_end_pos())
-                gripper_pos = self.gripper.getPosition() / 255
-                data["grasp_state"] = [gripper_pos]
-                end_pos[3:6] *= np.pi / 180  # 单位：° -> rad
-                data["robot_state"] = end_pos.tolist() 
-                for camera_subscirber in self.camera_subscirbers:
-                    imgdata[camera_subscirber.camera_name] = camera_subscirber.get_img()
-
-                # 机械臂、夹爪到指定位置set_pos,当前状态获取，下一个状态是当前的动作，在指定误差内进入数据上传阶段
-                self.robot_client.set_switch_flag4(0)
-                self.robot_client.set_mode(Mode.ENDPOS.value)
-                time.sleep(0.025)
-                self.robot_client.set_switch_flag4(1)
-                self.robot_client.set_pos(self.robot_end_pos)
-                self.gripper.close()
-                data["grasp_action"] = [1]
-                data["robot_vel_command"] = np.zeros(6).tolist()
-                target_pos = np.array(self.robot_end_pos)
-                target_pos[3:6] *= np.pi / 180
-                while 1:
-                    start_time = time.time()
-                    now_pos[0:6] = copy.deepcopy(self.robot_client.get_end_pos())
-                    now_pos[3:6] *= np.pi / 180
-                    data["robot_action"] = now_pos.tolist()
-                    self.put_data(data, imgdata)
-
-                    d_pos = np.linalg.norm(now_pos[0:6] - np.array(target_pos))
-                    print("d_pos: {0}, target: {1}".format(d_pos, self.pos_target_d), end='\r')
-                    # if self.img_show:
-                    #         for camera_subscirber in self.camera_subscirbers:
-                    #             img = camera_subscirber.get_img()
-                    #             if not (img is None):
-                    #                 cv2.imshow(str(camera_subscirber.camera_id), img)
-                    #         cv2.waitKey(1)
-
-                    if d_pos < 0.003:
-                        break
-                    else:
-                        data["timestamp"] = time.time()
-                        data["robot_state"] = now_pos.tolist()
-                        gripper_pos = self.gripper.getPosition() / 255
-                        data["grasp_state"] = [gripper_pos]
-                        data["robot_vel_command"] = np.zeros(6).tolist()
-                        data["grasp_action"] = [1]
-                        # 等 1/sample_frequency s
-                        while (time.time() - start_time) < dt:
-                            pass
-
-                self.gripper.open()
-
-                for i in range(self.end_delay):
-                    start_time = time.time()
-                    while (time.time() - start_time) < dt:
-                        pass
-                    data["timestamp"] = time.time()
-                    now_pos[0:6] = copy.deepcopy(self.robot_client.get_end_pos())
-                    now_pos[3:6] *= np.pi / 180
-                    data["robot_state"] = now_pos.tolist()
-                    data["robot_action"] = now_pos.tolist()
-                    gripper_pos = self.gripper.getPosition() / 255
-                    data["grasp_state"] = [gripper_pos]
-                    data["robot_vel_command"] = np.zeros(6).tolist()
-                    data["grasp_action"] = [0]
-                    for camera_subscirber in self.camera_subscirbers:
-                        imgdata[camera_subscirber.camera_name] = camera_subscirber.get_img()
-                    self.put_data(data, imgdata)
-
-                start_time = time.time()
-                self.robot_client.set_switch_flag4(0)
-                self.robot_client.set_mode(Mode.ENDVEL.value)
-                time.sleep(0.020)
-                self.robot_client.set_end_vel(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]))
-                self.robot_client.set_switch_flag4(1)
-                print("--执行完毕--")
-                while (time.time() - start_time) < dt:
-                    pass
-                continue
 
             # 上传键上传录制
             if self.xbox_controller.UPLOAD_ID in pressed_buttons_id:
@@ -238,6 +164,34 @@ class DataSampler(Node):
             for camera_subscirber in self.camera_subscirbers:
                 imgdata[camera_subscirber.camera_name] = camera_subscirber.get_img()
             action = np.zeros(6)
+
+            # ---------act----------
+            # act_control_command = self.dp.get_actions(imgdata, data["robot_state"])
+            # print("推断耗时: {0:.3f}s".format(time.time() - data["timestamp"]))
+            # for i in range(self.dp.steps_per_inference):
+            #     action = actions[i]
+            #     action[3:6] *= 180 / np.pi
+
+
+            act_control_command = None
+
+            if not (act_control_command is None):
+
+                # self.robot_client.set_end_vel(act_control_command[0:6])
+                # print("control_command: ", [f"{v:.4f}" for v in act_control_command[0:3]])
+  
+                # self.robot_client.jk_robot_tcp.setEndPos(action)
+                # vel_command = (action - self.robot_client.get_end_pos()) / self.dp.dt
+                # self.robot_client.set_end_vel(vel_command)
+                # if action[6] > 0.5:
+                #     self.robot_client.close_gripper()
+                # else:
+                #     self.robot_client.open_gripper()
+                #
+                # start_time = time.time()
+                # while (time.time() - start_time) < (self.dp.dt):
+                #     pass
+
             if not (control_command is None):
                 self.robot_client.set_end_vel(control_command[0:6])
                 # print("control_command: ", [f"{v:.4f}" for v in control_command[0:3]])
@@ -349,7 +303,7 @@ class DataSampler(Node):
 
 def main():
     rclpy.init()
-    robot_policy = DataSampler("robot_policy_node",'config_data_sampler_default.yaml')
+    robot_policy = RobotPolicy("robot_policy_node",'config_act_eval.yaml')
     executor = rclpy.executors.MultiThreadedExecutor()
     executor.add_node(robot_policy)
 

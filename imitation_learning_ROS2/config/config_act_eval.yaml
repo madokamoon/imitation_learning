@@ -18,3 +18,25 @@ xbox_controller:
 # 不设置相机
 # camera_names: ["camera0", "camera1", "camera2"]
 camera_names: ["camera0", "camera1"]
+
+# ACT模型配置
+act_policy:
+  ckpt_path: "/home/madoka/python/imitation_learning/act_plus/act-plus-plus/ckpts/policy_best.ckpt"
+  stats_path: "/home/madoka/python/imitation_learning/act_plus/act-plus-plus/ckpts/dataset_stats.pkl"
+  policy_class: "ACT"
+  hidden_dim: 512
+  dim_feedforward: 3200
+  num_queries: 8
+  kl_weight: 10
+  enc_layers: 4
+  dec_layers: 7
+  nheads: 8
+  backbone: "resnet18"
+  lr_backbone: 1e-5
+  state_dim: 7
+  action_dim: 9
+  vq: false
+  temporal_agg: false
+
+
+

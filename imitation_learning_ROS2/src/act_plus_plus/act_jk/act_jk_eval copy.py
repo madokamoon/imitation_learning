@@ -27,7 +27,157 @@ from data_sampler.xbox_controller import XBOXController
 from data_sampler.camera_subscriber import CameraSubscriber
 from data_sampler.pyRobotiqGripper import RobotiqGripper
 
-class DataSampler(Node):
+# 添加ACT模型相关的导入
+import os
+# 正确展开用户主目录
+anaconda_path = os.path.expanduser('~/APP/anaconda3/envs/jk/lib/python3.10/site-packages')
+if os.path.exists(anaconda_path) and anaconda_path not in sys.path:
+    sys.path.append(anaconda_path)
+
+import torch
+import pickle
+import sys
+from PIL import Image as PILImage
+from torchvision import transforms
+
+# 确保能够导入ACT相关模块
+current_dir = os.path.dirname(os.path.abspath(__file__))
+act_path = os.path.abspath(os.path.join(current_dir, "../../../../act_plus/act-plus-plus"))
+
+if act_path not in sys.path:
+    sys.path.append(act_path)
+
+# 导入所需的ACT模块
+from policy import ACTPolicy
+from utils import load_data
+from detr.models.latent_model import Latent_Model_Transformer
+
+class ACTPolicyWrapper:
+    def __init__(self, config):
+        """
+        封装ACTPolicy类以适配当前应用
+        
+        Args:
+            config: ACT模型配置参数
+        """
+        self.config = config
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.dt = 1.0 / 20.0  # 假设模型以20Hz运行
+        self.steps_per_inference = 1
+        
+        print(f"使用设备: {self.device}")
+        
+        # 配置策略参数
+        policy_config = {
+            'lr': config["lr"],
+            'num_queries': config["num_queries"],
+            'kl_weight': config["kl_weight"],
+            'hidden_dim': config["hidden_dim"],
+            'dim_feedforward': config["dim_feedforward"],
+            'lr_backbone': 1e-5,
+            'backbone': 'resnet18',
+            'enc_layers': 4,
+            'dec_layers': 7,
+            'nheads': 8,
+            'camera_names': config["camera_names"],
+            'vq': config.get("use_vq", False),
+            'vq_class': config.get("vq_class", None),
+            'vq_dim': config.get("vq_dim", None),
+            'action_dim': 9,
+            'no_encoder': config.get("no_encoder", False),
+        }
+        
+        # 加载模型
+        self.policy = ACTPolicy(policy_config)
+        self.policy.deserialize(torch.load(self.config["ckpt_path"], map_location=self.device))
+        self.policy.eval()
+        self.policy.cuda()
+        
+        # 加载数据统计信息，用于归一化
+        with open(self.config["stats_path"], 'rb') as f:
+            self.stats = pickle.load(f)
+            
+        # 图像预处理
+        self.transform = transforms.Compose([
+            transforms.Resize((224, 224)),  # 调整大小适应模型输入
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        
+        print("ACT模型加载完成")
+    
+    def normalize_data(self, state):
+        """归一化状态数据"""
+        state_mean = torch.FloatTensor(self.stats['qpos_mean']).to(self.device)
+        state_std = torch.FloatTensor(self.stats['qpos_std']).to(self.device)
+        state = (torch.FloatTensor(state).to(self.device) - state_mean) / state_std
+        return state
+    
+    def denormalize_action(self, action):
+        """反归一化动作数据"""
+        action_mean = torch.FloatTensor(self.stats['action_mean']).to(self.device)
+        action_std = torch.FloatTensor(self.stats['action_std']).to(self.device)
+        action = action * action_std + action_mean
+        return action.cpu().numpy()
+        
+    def preprocess_images(self, imgdata):
+        """预处理图像数据为模型输入格式"""
+        processed_images = []
+        camera_ids = sorted(list(imgdata.keys()))
+        
+        for cam_id in camera_ids:
+            img = imgdata[cam_id]
+            if img is not None:
+                img_pil = PILImage.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+                img_tensor = self.transform(img_pil)
+                processed_images.append(img_tensor)
+                
+        # 如果没有图像，返回None
+        if len(processed_images) == 0:
+            return None
+            
+        # 堆叠所有图像张量
+        return torch.stack(processed_images).to(self.device).unsqueeze(0)
+    
+
+    def get_actions(self, imgdata, robot_state):
+        """
+        从当前状态和图像预测动作
+        
+        Args:
+            imgdata: 相机图像数据
+            robot_state: 机器人当前状态
+            
+        Returns:
+            预测的动作
+        """
+        with torch.no_grad():
+            # 处理图像数据
+            images = self.preprocess_images(imgdata)
+            if images is None:
+                print("警告：没有有效的图像输入")
+                return None
+                
+            # 处理状态数据（包括机器人状态和夹爪状态）
+            state = robot_state.copy()
+            if len(state) == 6:  # 如果只有位置和方向
+                # 添加一个夹爪状态（假设初始为开）
+                state.append(0.0)
+                
+            # 归一化状态
+            norm_state = self.normalize_data(state)
+            norm_state = norm_state.unsqueeze(0)  # 添加批次维度
+            
+            # 执行推理
+            pred_action = self.policy(norm_state, images)
+            
+            # 反归一化预测的动作
+            action = self.denormalize_action(pred_action[0])
+            
+            # 返回处理后的动作
+            return action
+
+class RobotPolicy(Node):
     def __init__(self, node_name:str, config_file:str):
         super().__init__(node_name)
         # 读取配置文件
@@ -87,6 +237,12 @@ class DataSampler(Node):
         self.xbox_controller.create_control_action_client(self, 'robot_policy_action', self.actions_callback_group)
         self.get_logger().info("XBOX 初始化完成")
 
+        # ---------act----------
+        act_config = yaml_data["act_policy"]
+        self.act = ACTPolicyWrapper(act_config)
+        self.get_logger().info("ACT模型 初始化完成")
+        # ---------act----------
+
         # 数据采样
         self.data_id = 0
         self.epoch = 0
@@ -118,6 +274,8 @@ class DataSampler(Node):
         self.robot_client.set_switch_flag4(1)
         time.sleep(0.05)
         self.gripper.open()
+
+
         print("-----开始录制-----")
         # 初始化机器人状态数据录制
         self.start_sample(record_path)
@@ -135,91 +293,6 @@ class DataSampler(Node):
                 # 机器人暂停
                 self.robot_client.set_switch_flag4(0)
                 break
-            # B键执行预定义操作并录制
-            if self.xbox_controller.B_ID in pressed_buttons_id:
-                print("--预定义操作--")
-                # 到达指定位置并录制
-                data = {}
-                now_pos = np.ones(6)
-
-                data["timestamp"] = time.time()
-                now_pos[0:6] = copy.deepcopy(self.robot_client.get_end_pos())
-                gripper_pos = self.gripper.getPosition() / 255
-                data["grasp_state"] = [gripper_pos]
-                end_pos[3:6] *= np.pi / 180  # 单位：° -> rad
-                data["robot_state"] = end_pos.tolist() 
-                for camera_subscirber in self.camera_subscirbers:
-                    imgdata[camera_subscirber.camera_name] = camera_subscirber.get_img()
-
-                # 机械臂、夹爪到指定位置set_pos,当前状态获取，下一个状态是当前的动作，在指定误差内进入数据上传阶段
-                self.robot_client.set_switch_flag4(0)
-                self.robot_client.set_mode(Mode.ENDPOS.value)
-                time.sleep(0.025)
-                self.robot_client.set_switch_flag4(1)
-                self.robot_client.set_pos(self.robot_end_pos)
-                self.gripper.close()
-                data["grasp_action"] = [1]
-                data["robot_vel_command"] = np.zeros(6).tolist()
-                target_pos = np.array(self.robot_end_pos)
-                target_pos[3:6] *= np.pi / 180
-                while 1:
-                    start_time = time.time()
-                    now_pos[0:6] = copy.deepcopy(self.robot_client.get_end_pos())
-                    now_pos[3:6] *= np.pi / 180
-                    data["robot_action"] = now_pos.tolist()
-                    self.put_data(data, imgdata)
-
-                    d_pos = np.linalg.norm(now_pos[0:6] - np.array(target_pos))
-                    print("d_pos: {0}, target: {1}".format(d_pos, self.pos_target_d), end='\r')
-                    # if self.img_show:
-                    #         for camera_subscirber in self.camera_subscirbers:
-                    #             img = camera_subscirber.get_img()
-                    #             if not (img is None):
-                    #                 cv2.imshow(str(camera_subscirber.camera_id), img)
-                    #         cv2.waitKey(1)
-
-                    if d_pos < 0.003:
-                        break
-                    else:
-                        data["timestamp"] = time.time()
-                        data["robot_state"] = now_pos.tolist()
-                        gripper_pos = self.gripper.getPosition() / 255
-                        data["grasp_state"] = [gripper_pos]
-                        data["robot_vel_command"] = np.zeros(6).tolist()
-                        data["grasp_action"] = [1]
-                        # 等 1/sample_frequency s
-                        while (time.time() - start_time) < dt:
-                            pass
-
-                self.gripper.open()
-
-                for i in range(self.end_delay):
-                    start_time = time.time()
-                    while (time.time() - start_time) < dt:
-                        pass
-                    data["timestamp"] = time.time()
-                    now_pos[0:6] = copy.deepcopy(self.robot_client.get_end_pos())
-                    now_pos[3:6] *= np.pi / 180
-                    data["robot_state"] = now_pos.tolist()
-                    data["robot_action"] = now_pos.tolist()
-                    gripper_pos = self.gripper.getPosition() / 255
-                    data["grasp_state"] = [gripper_pos]
-                    data["robot_vel_command"] = np.zeros(6).tolist()
-                    data["grasp_action"] = [0]
-                    for camera_subscirber in self.camera_subscirbers:
-                        imgdata[camera_subscirber.camera_name] = camera_subscirber.get_img()
-                    self.put_data(data, imgdata)
-
-                start_time = time.time()
-                self.robot_client.set_switch_flag4(0)
-                self.robot_client.set_mode(Mode.ENDVEL.value)
-                time.sleep(0.020)
-                self.robot_client.set_end_vel(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]))
-                self.robot_client.set_switch_flag4(1)
-                print("--执行完毕--")
-                while (time.time() - start_time) < dt:
-                    pass
-                continue
 
             # 上传键上传录制
             if self.xbox_controller.UPLOAD_ID in pressed_buttons_id:
@@ -238,6 +311,37 @@ class DataSampler(Node):
             for camera_subscirber in self.camera_subscirbers:
                 imgdata[camera_subscirber.camera_name] = camera_subscirber.get_img()
             action = np.zeros(6)
+
+            # ---------act----------
+            act_control_command = self.act.get_actions(imgdata, data["robot_state"])
+            print("推断耗时: {0:.3f}s".format(time.time() - data["timestamp"]))
+            # ---------act----------
+
+
+            control_command = None
+
+            if not (act_control_command is None):
+                # 转换ACT输出为机器人控制命令
+                self.robot_client.set_end_vel(act_control_command[0:6])
+                print("ACT控制命令: ", [f"{v:.4f}" for v in act_control_command[0:3]])
+                
+                # 处理夹爪控制
+                if act_control_command[6] > 0.5:
+                    self.gripper.close()
+                    data["grasp_action"] = [1]
+                else:
+                    self.gripper.open()
+                    data["grasp_action"] = [0]
+                
+                # 更新action向量
+                action[0:6] = act_control_command[0:6]
+                
+                # 等待直到达到目标控制周期
+                start_time = time.time()
+                while (time.time() - start_time) < self.act.dt:
+                    pass
+
+
             if not (control_command is None):
                 self.robot_client.set_end_vel(control_command[0:6])
                 # print("control_command: ", [f"{v:.4f}" for v in control_command[0:3]])
@@ -349,7 +453,7 @@ class DataSampler(Node):
 
 def main():
     rclpy.init()
-    robot_policy = DataSampler("robot_policy_node",'config_data_sampler_default.yaml')
+    robot_policy = RobotPolicy("robot_policy_node",'config_act_eval.yaml')
     executor = rclpy.executors.MultiThreadedExecutor()
     executor.add_node(robot_policy)
 
